@@ -35,7 +35,7 @@ class StatisticItem
 
   fulltext_search_in :text_marker, :index_customers => 'broadly_search',
     :filters => {
-      :customers => lambda { |event| event.customer.map{|e| e} }
+      :customers => lambda { |event| event.customer }
     }
 
   scope :active, -> { where(timestamp: StatisticItem.max(:timestamp)) }

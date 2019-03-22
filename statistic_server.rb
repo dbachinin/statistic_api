@@ -54,16 +54,23 @@ class Event
 
   index({ created_at: 1 },{ background: true })
 
-end
-def manage_indexes(operation)
-  if operation == 'created_at'
-    Event.create_indexes
-  elsif operation == 'dynamic_fields'
+  scope :customers, -> { all.map{ |event| event.customer } }
+  scope :by_time, ->(earliest_date, latest_date, key1: nil, key1val: nil, key2: nil, key2val: nil, key3: nil, key3val: nil){
+    where({
+      :timestamp.gte => earliest_date.to_i, :timestamp.lte => latest_date.to_i,
+      key1 => key1val,
+      key2 => key2val,
+      key3 => key3val,
+      })
+    }
+  def self.create_indexes
+    super
     Thread.new do
       client = Mongo::Client.new([ 'localhost:27017' ], :database => "hifc_statistic_dev", :server_selection_timeout => 5)
+      collections = client.database.collection_names
       events = client[:events]
       events_fields = events.find.map{|events|events.keys}.map{|k| k.select{|i|!i.match(/_id|updated_at|created_at|timestamp/)}}.flatten.uniq #get all dynamic fields
-      nested_fields = events_fields.map{|field| events.find.map{|events|events[field] }.compact.flatten.map{|i| i.keys.select{|f|f.match(/status|_id|is_|_at/)}}.uniq.flatten.map{|f| field + '.' + f } }
+      nested_fields = events_fields.map{|field| events.find.map{|events|events[field] }.compact.flatten.map{|i| i.keys.select{|f|f.match(/status|_id|^id$|is_|_at|start/)}}.uniq.flatten.map{|f| field + '.' + f } }
       nested_fields.each{|a|
         a.each{|f|
           events.indexes.create_many([
@@ -77,6 +84,20 @@ def manage_indexes(operation)
     end
   end
 end
+
+class DynamicCollection
+  def self.create(collection, fields)
+    klass = Class.new do
+      include Mongoid::Document
+      store_in collection: collection.downcase
+      fields.each do |item|
+        field item[:name], type: item[:type]
+      end
+    end
+    Object.const_set(collection, klass)
+  end
+end
+
 # get_mode = ENV.fetch("mode") == 'cli' rescue false
 # p get_mode ? 'runing in cli' : 'runing in without cli'
 # unless get_mode
@@ -112,9 +133,9 @@ namespace '/api/v1' do
       event_models.each do |model|
         begin
           data_model = data[model[:plural]]
-          data_model.map{|item| item['_id'] = item.delete('id') }
-          event[model[:singular]] = data_model
-          event.write_attribute(model[:singular], data_model)
+          # data_model.map{|item| item['_id'] = item.delete('id') }
+          event[model[:singular]] = data_model.flatten
+          event.write_attribute(model[:singular], data_model.flatten)
           event.save
         rescue StandardError => e
           p 'error', e

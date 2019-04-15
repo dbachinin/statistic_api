@@ -1,5 +1,5 @@
 source :rubygems
-ruby "~> 2.5.3"
+ruby "2.4.1"
 gem 'rake'
 gem "puma"
 gem "sinatra"

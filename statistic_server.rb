@@ -46,68 +46,198 @@ Mongoid.load! "config/mongoid.yml"
 #   enum :status, %i[ empty fill ]
 # end
 
-class Event
-  include Mongoid::Document
-  include Mongoid::Timestamps
-  include Mongoid::Attributes::Dynamic
-  include Mongoid::FullTextSearch
 
-  index({ created_at: 1 },{ background: true })
+# class Event
+#   include Mongoid::Document
+#   include Mongoid::Timestamps
+#   include Mongoid::Attributes::Dynamic
+#   include Mongoid::FullTextSearch
+#   include Mongoid::Enum
+  
+#   index({ created_at: 1 },{ background: true })
+#   enum :status, %i[ empty fill ]
+#   scope :customers, -> { all.map{ |event| event.customer } }
+#   scope :active, -> { where(timestamp: StatisticItem.max(:timestamp)) }
+#   scope :by_time, ->(earliest_date, latest_date, key1: nil, key1val: nil, key2: nil, key2val: nil, key3: nil, key3val: nil){
+#     where({
+#       :timestamp.gte => earliest_date.to_i, :timestamp.lte => latest_date.to_i,
+#       key1 => key1val,
+#       key2 => key2val,
+#       key3 => key3val,
+#       })
+#     }
+#   def self.create_indexes
+#     super
+#     Thread.new do
+#       client = Mongo::Client.new([ 'localhost:27017' ], :database => "hifc_statistic_dev", :server_selection_timeout => 5)
+#       collections = client.database.collection_names
+#       collections.each do |collection|
+#         DynamicCollection.init(collection.capitalize) unless eval("defined?(#{collection.capitalize})")
+#         coll = client[collection]
+#         coll_fields = coll.find.map{|coll|
+#           coll.keys
+#         }.map{|k| 
+#           k.select{|i|!i.match(/_id|updated_at|created_at|timestamp/)}}.flatten.uniq #get all dynamic fields
+#         nested_fields = coll_fields.map{|field| 
+#           coll.find.map{|coll|
+#             coll[field] 
+#           }.compact.flatten.map{|i| 
+#             i.keys.select{|f|
+#               f.match(/status|_id|^id$|is_|_at|start/)
+#               } if i.class.name == 'BSON::Document'}.uniq.flatten.map{|f| field + '.' + f if field && f} }
+#         nested_fields.each{|a|
+#           a.each{|f|
+#             coll.indexes.create_many([
+#               { key: {f.to_sym => 1 } }
+#             ]) if f
+#           }
+#         }
+#         # regexp = coll_fields.join('|')
+#         # p nested_fields, coll_fields
+#         # relation_fields = nested_fields.map{|i|i.select{|s|s.split('.').last.match(/#{regexp}/)}}.flatten if nested_fields.flatten.any?
+#         # status_fields = nested_fields.map{|i|i.select{|s|s.split('.').last.match(/status/)}}.flatten if nested_fields.flatten.any?
+#       end
+#     end
+#   end
+# end
 
-  scope :customers, -> { all.map{ |event| event.customer } }
-  scope :by_time, ->(earliest_date, latest_date, key1: nil, key1val: nil, key2: nil, key2val: nil, key3: nil, key3val: nil){
-    where({
-      :timestamp.gte => earliest_date.to_i, :timestamp.lte => latest_date.to_i,
-      key1 => key1val,
-      key2 => key2val,
-      key3 => key3val,
-      })
-    }
-  def self.create_indexes
-    super
-    Thread.new do
-      client = Mongo::Client.new([ 'localhost:27017' ], :database => "hifc_statistic_dev", :server_selection_timeout => 5)
-      collections = client.database.collection_names
-      events = client[:events]
-      events_fields = events.find.map{|events|events.keys}.map{|k| k.select{|i|!i.match(/_id|updated_at|created_at|timestamp/)}}.flatten.uniq #get all dynamic fields
-      nested_fields = events_fields.map{|field| events.find.map{|events|events[field] }.compact.flatten.map{|i| i.keys.select{|f|f.match(/status|_id|^id$|is_|_at|start/)}}.uniq.flatten.map{|f| field + '.' + f } }
-      nested_fields.each{|a|
-        a.each{|f|
-          events.indexes.create_many([
-            { key: {f.to_sym => 1 } }
-          ])
-        }
-      }
-      regexp = events_fields.join('|')
-      relation_fields = nested_fields.map{|i|i.select{|s|s.split('.').last.match(/#{regexp}/)}}.flatten
-      status_fields = nested_fields.map{|i|i.select{|s|s.split('.').last.match(/status/)}}.flatten
-    end
+class String
+  def ccap
+    @i = 0;self.split(//).map{|i|@i +=1;@i == 1 ? i.upcase : i}.join
   end
 end
 
+class Event
+  include Mongoid::Document
+  field :name
+  field :created, type: Mongoid::Boolean
+end
 class DynamicCollection
+  @@client = Mongo::Client.new([ 'localhost:27017' ], :database => "hifc_statistic_dev", :server_selection_timeout => 5)
+  @@collections = @@client.database.collection_names
+
+  def self.get_all_collections
+    @@collections.map(&:camelize)
+  end
+
+  def self.get_indexes(collection)
+    eval("#{collection.camelize}").collection.indexes.to_a
+  end
+
+  def self.init_all
+    @@collections.each do |collection|
+      init(collection.camelize)
+    end
+  end
+
+  def self.create_index(collection)
+    collection = collection.gsub(/\//,'__').underscore
+    DynamicCollection.init(collection.camelize) unless eval("defined?(#{collection.camelize})")
+    coll = @@client[collection]
+    coll_fields = coll.find.to_a[0..10].map{|coll|coll.keys.select{|i|i.match(/status|_id|^id$|is_|_at|start/)} }.flatten.uniq
+    coll_fields.each{|f| coll.indexes.create_many([ { key: {f.to_sym => 1 } } ]) if f };
+  end
+
+  def self.create_indexes
+    # super
+    Thread.new do
+      @@collections.each do |collection|
+        DynamicCollection.init(collection.camelize) unless eval("defined?(#{collection.camelize})")
+        coll = @@client[collection]
+        coll_fields = coll.find.to_a[0..10].map{|coll|coll.keys.select{|i|i.match(/status|_id|^id$|is_|_at|start/)} }.flatten.uniq
+        coll_fields.each{|f| coll.indexes.create_many([ { key: {f.to_sym => 1 } } ]) if f }
+      end
+    end
+  end
+  def self.get_exist(collection)
+    @@collections.include?(collection)
+  end
+  def self.init(collection)
+    klass = Class.new do
+      include Mongoid::Document
+      include Mongoid::Timestamps
+      include Mongoid::Attributes::Dynamic
+      store_in collection: collection.underscore
+      coll = @@client[collection.underscore.to_sym]
+      fields = coll.aggregate([
+        { "$limit": 10 },
+        {
+          "$project":{
+            "arrayofkeyvalue":{
+              "$objectToArray":"$$ROOT"
+            }
+          }
+        },
+        {
+        "$unwind":"$arrayofkeyvalue"
+        },
+        {
+        "$project": {
+          "_id": "$_id",
+          "fieldKey": "$arrayofkeyvalue.k",
+          "fieldType": {  "$type": "$arrayofkeyvalue.v"  }
+          }
+        },
+        {"$match": {}},
+        {"$group": {
+          "_id": "$_id",
+          "fields": {
+            "$addToSet": {
+              "$concat": ["$fieldKey",'%',"$fieldType"]
+              }
+            }
+          }
+        }], :allow_disk_use => true).to_a[-1]['fields'].map{|i|i.split('%')}.to_h
+        store_in collection: collection.underscore
+        # fields.merge(event_id: String)
+        types = {
+          array: Array,
+          big_decimal: BigDecimal,
+          binary: BSON::Binary,
+          bool: Mongoid::Boolean,
+          date: Date,
+          float: Float,
+          hash: Hash,
+          int: Integer,
+          objectId: BSON::ObjectId,
+          range: Range,
+          regexp: Regexp,
+          set: Set,
+          string: String,
+          symbol: Symbol,
+          time: Time
+        }.with_indifferent_access
+        fields.each do |k,v|
+          field k, type: types[v]
+        end
+    end
+    Object.const_set(collection, klass)
+  end
   def self.create(collection, fields)
     klass = Class.new do
       include Mongoid::Document
-      store_in collection: collection.downcase
+      include Mongoid::Timestamps
+      include Mongoid::Attributes::Dynamic
+      store_in collection: collection.underscore
       fields.each do |item|
         field item[:name], type: item[:type]
       end
     end
     Object.const_set(collection, klass)
+    Event.create!({name: collection, created: true})
   end
 end
-
+DynamicCollection.init_all
 # get_mode = ENV.fetch("mode") == 'cli' rescue false
 # p get_mode ? 'runing in cli' : 'runing in without cli'
 # unless get_mode
 #   Thread.new do
 #     p 'run items generator'
 #     loop do
-#       events_item = StatisticItem.create({timestamp: Time.now.to_i})
-#       p 'Generate StatisticItem' + events_item._id.to_s
-#       if StatisticItem.offset[-2]
-#         StatisticItem.offset[-2].delete unless StatisticItem.offset[-2].fill?
+#       events_item = Event.create({timestamp: Time.now.to_i})
+#       p 'Event' + events_item._id.to_s
+#       if Event.offset[-2]
+#         Event.offset[-2].delete unless Event.offset[-2].fill?
 #       end
 #       events_item.timestamp = Time.now.to_i
 #       sleep 60
@@ -128,15 +258,51 @@ namespace '/api/v1' do
     Thread.new do
       timestamp = Time.now.to_i
       data = JSON.parse(params[:events])
-      event = Event.create({timestamp: timestamp })
-      event_models = data.keys.map{|k|{plural: k, singular: k.singularize} }
+      # event = Event.create({timestamp: timestamp })
+      event_models = data.keys.map{|k|{plural: k, singular: k.gsub(/\//,'__').camelize.singularize} }
       event_models.each do |model|
         begin
           data_model = data[model[:plural]]
-          # data_model.map{|item| item['_id'] = item.delete('id') }
-          event[model[:singular]] = data_model.flatten
-          event.write_attribute(model[:singular], data_model.flatten)
-          event.save
+          if data_model.any?
+            data_model = data_model.first.class.name == 'Array' ? data_model : [data_model]
+            data_model.each{|i|i.map{|item| 
+            item["self_#{model[:singular].underscore}_id"] = item.delete('id')
+            item["self_#{model[:singular].underscore}_created_at"] = item.delete('created_at')
+            item["self_#{model[:singular].underscore}_updated_at"] = item.delete('updated_at') }}
+            created = Event.where(name: model[:singular]).first&.created
+            loaded = eval(model[:singular]) rescue false
+            item_hash = {}
+            data_model.flatten.each do |item|
+              item_hash = item.map{|i|[i[0],[i[1].to_s,i[1].class.name]]}.to_h
+              item_hash.each do |k,v|
+                case v
+                when ->(n){n[1] == "Fixnum" || (n[1] == "String" && n[0].include?('_id'))}
+                  item_hash[k] = 'int'
+                when ->(n){n[1] == 'Float'}
+                  item_hash[k] = 'float'
+                when ->(n){n[1] == "String" && Date.parse([n][0][0]) rescue false}
+                  item_hash[k] = 'date'
+                when ->(n){n[1] == "FalseClass" || n[1] == "TrueClass"}
+                  item_hash[k] = 'boolean'
+                when ->(n){n[1] == "Array"}
+                  item_hash[k] = 'array'
+                else
+                  item_hash[k] = 'string'
+                end
+              end
+            end
+            unless created
+              DynamicCollection.create(model[:singular], item_hash.map{|k,v|{:name => k, :type => v}})
+              DynamicCollection.create_index(model[:singular])
+            end
+            DynamicCollection.init(model[:singular]) if created && !loaded
+            klass = eval(model[:singular])
+            data_model.flatten.each do |model_item|
+              klass.create!(model_item)
+            end
+            # event.write_attribute(model[:singular], data_model.flatten)
+            # event.save
+          end
         rescue StandardError => e
           p 'error', e
         end
@@ -153,8 +319,8 @@ namespace '/api/v2' do
   #plural to singular
   # Serializers
   class StatisticSerializer
-    def initialize(user=nil, customer, date_start, data_end)
-      @user, @customer, @date_start, @data_end = user, customer, date_start, data_end
+    def initialize(user=nil, klass=nil, date_start=nil, date_end=nil, querry, type)
+      @user, @klass, @date_start, @date_end, @querry, @type = user, klass, date_start, date_end, querry, type
     end
 
     def as_json(*)
@@ -170,6 +336,21 @@ namespace '/api/v2' do
   class SerailisationActions
     
   end
+
+
+  class DataSerializer
+    def initialize(data)
+      @data = data
+    end
+
+    def as_json(*)
+      data = []
+      @data.flatten.each{|i|i.delete('_id') if i['_id'] == 'null'; data << i}
+      data
+    end
+  end
+
+
   class PieSerializer
     def initialize(user=nil, customer, date_start, date_end, field)
       @user, @customer, @date_start, @date_end, @field = user, customer, date_start, date_end, field
@@ -189,20 +370,17 @@ namespace '/api/v2' do
     end
   end
 
-  post '/get_data' do
-    Thread.new do
-      user = params[:user]
-      customers = params[:customers]
-      earliest_date = params[:earliest_date]
-      latest_date = params[:latest_date]
-      type_request = params[:type_request]
-      customers = customers||StatisticItem.where({:timestamp.gte => earliest_date.to_i, :timestamp.lte => latest_date.to_i})
-      begin
-        events_item.save!
-      rescue StandardError => e
-        p 'error', e, events_item.data[timestamp.to_s]
-      end
+  post '/get_data/' do
+    requests = JSON.parse params[:req]
+    param = JSON.parse params[:param]
+
+    out_data = []
+    param.each_with_index do |pm, index|
+      p 'pm', pm, "\"#{pm.values[0]}\"", "\\#{pm.keys[0]}\\"
+      db_requests = requests.map{|r|r.gsub(/\\#{pm.keys[0]}\\/, "\"#{pm.values[0]}\"")}
+      out_data << db_requests.map{|req|eval(req)} if User.where(self_user_id: pm.values[0]).first
     end
+    DataSerializer.new(out_data).to_json
   end
 end
 

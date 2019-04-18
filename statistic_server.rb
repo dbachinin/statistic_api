@@ -373,14 +373,18 @@ namespace '/api/v2' do
   post '/get_data/' do
     requests = JSON.parse params[:req]
     param = JSON.parse params[:param]
-
-    out_data = []
-    param.each_with_index do |pm, index|
-      p 'pm', pm, "\"#{pm.values[0]}\"", "\\#{pm.keys[0]}\\"
-      db_requests = requests.map{|r|r.gsub(/\\#{pm.keys[0]}\\/, "\"#{pm.values[0]}\"")}
-      out_data << db_requests.map{|req|eval(req)} if User.where(self_user_id: pm.values[0]).first
+    p 'req', requests
+    if param.try(:any?)
+      out_data = []
+      param.each_with_index do |pm, index|
+        requests = requests.class.name == 'Array' ? requests : JSON.parse(requests)
+        db_requests = requests.map{|r|r.gsub(/\\#{pm.keys[0]}\\/, "\"#{pm.values[0]}\"")}
+        out_data << db_requests.map{|req|eval(req)} if User.where(self_user_id: pm.values[0]).first
+      end
+      DataSerializer.new(out_data).to_json
+    else
+      DataSerializer.new(eval(requests)).to_json
     end
-    DataSerializer.new(out_data).to_json
   end
 end
 

@@ -8,3 +8,4 @@ gem "mongoid-enum"
 gem 'sinatra-contrib'
 gem 'rspec'
 gem 'mongoid_fulltext'
+gem 'oauth2'

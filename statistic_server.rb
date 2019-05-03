@@ -379,9 +379,9 @@ namespace '/api/v2' do
     def filling_data
       req = []
       self.each{|b|
-          date = Time.parse(b[b.keys[0]]) && b[b.keys[0]].match(/^\d*-\d*-\d+/) rescue nil
-          val = date ? "Time.parse(\"#{b.values[0]}\")" : "\"#{b.values[0]}\""
-          req = req.any? ? req.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} : yield.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} 
+        date = Time.parse(b[b.keys[0]]) && b[b.keys[0]].match(/^\d*-\d*-\d+/) rescue nil
+        val = date ? "Time.parse(\"#{b.values[0]}\")" : "\"#{b.values[0]}\""
+        req = req.any? ? req.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} : yield.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} 
       }
       req
     end
@@ -392,18 +392,14 @@ namespace '/api/v2' do
     startime = Time.now.to_i
     requests = JSON.parse params[:req]
     param = JSON.parse params[:param]
-p 'param', param
     if param.try(:any?)
       out_data = []
       tmp_db_requests = []
       clean_db_requests = []
       keys =  param.map(&:keys).flatten.uniq
-      date_keys = keys.select{|i|i.match(/DATE/)}
       keys_without_date = keys.reverse.reject{|i|i.match(/DATE/)}
       keys_count = keys_without_date.count
       empty_params = JSON.parse(requests).map{|r|r.scan(/\\([A-Z|A-Z_A-Z]+)\\/)}.flatten - keys
-      # p 'empty_params', empty_params
-      # vals = {};key = [];b = keys.map{|i| key.empty? ? [i.to_sym, a.select{|s|s.keys[0] == i}.map(&:values).flatten] : key}.to_h
       builded_requests = {}
       keys_without_date.each_with_index{|v,i|
         builded_requests[v] = []
@@ -413,15 +409,6 @@ p 'param', param
       }
       builded_requests = builded_requests[keys_without_date.last].flatten
 
-      p 'builded_requests', Time.now.to_i - startime
-      # p 'builded_requests', builded_requests
-      # builded_requests = builded_requests[keys_without_date.last].flatten
-      # date_keys.each do |pm|
-      #   date = Time.parse(param.select{|i|i[pm]}.values[0]) && param.select{|i|i[pm]}.values[0].match(/^\d*-\d*-\d+/) rescue nil
-      #   val = date ? "Time.parse(\"#{param.select{|i|i[pm]}.values[0]}\")" : "\"#{param.select{|i|i[pm]}.values[0]}\""
-      #   tmp_db_requests = tmp_db_requests.any? ? tmp_db_requests.map{|r|r.gsub(/\\#{pm}\\/, val)} : builded_requests.map{|r|r.gsub(/\\#{pm}\\/, val)}
-      # end
-      # requests = requests.class.name == 'Array' ? requests : JSON.parse(requests)
       if empty_params.any?
         empty_params.each do |key|
           clean_db_requests = clean_db_requests.any? ? clean_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/,\{.*"\$(.*)#{key}(.*?)\}\},/, ',').gsub(/\,\s?\W?\"[a-z|A-Z|_]+\W?\"\:\s{\W?"\$eq\W?":(.*)?#{key}(.*?)\W}/, '') } } : builded_requests.map{|r| { r.keys[0] => r.values[0].gsub(/,\{.*"\$(.*)#{key}(.*?)\}\},/, ',').gsub(/\,\s?\W?\"[a-z|A-Z|_]+\W?\"\:\s{\W?"\$eq\W?":(.*)?#{key}(.*?)\W}/, '') } }
@@ -429,57 +416,25 @@ p 'param', param
       else
         clean_db_requests = builded_requests
       end
-      p 'clean db requests', Time.now.to_i - startime
       param.each do |pm|
-        # p 'PM', pm
         date = Time.parse(pm[pm.keys[0]]) && pm[pm.keys[0]].match(/^\d*-\d*-\d+/) rescue nil
         val = date ? "Time.parse('#{pm.values[0]}')" : "\"#{pm.values[0]}\""
         key = pm.keys[0]
-        # p 'val', val
-        # p 'PM', pm 
         tmp_db_requests = tmp_db_requests.any? ? tmp_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val) } } : clean_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val)  } }
-        
-        # if tmp_db_requests.any?
-        #   tmp_db_requests = tmp_db_requests.map{|r|r.gsub(/\\#{pm.keys[0]}\\/, val)}
-        #   keys[pm.keys[0]] 
-        # else
-        #   tmp_db_requests = requests.map{|r|r.gsub(/\\#{pm.keys[0]}\\/, val)}
-        # end
-        #p 'tmp_db_requests', tmp_db_requests
-        # db_requests = requests.map{|r|r.gsub(/\\#{pm.keys[0]}\\/, "\"#{pm.values[0]}\"")}
-        # result = db_requests.map{|req|eval(req)} if eval("#{pm.keys[0].capitalize}").where("self_#{pm.keys[0].upcase}_id".to_sym => pm.values[0]).first
-        # p '###########', eval("#{pm.keys[0].capitalize}").where("self_#{pm.keys[0].downcase}_id".to_sym => pm.values[0]).first, "self_#{pm.keys[0].downcase}_id".to_sym, pm.values[0]
       end
-
-p 'tmp_db_requests', Time.now.to_i - startime, tmp_db_requests
-      
-      # av_keys = builded_requests.map{|r|r.scan(/\\([A-Z|A-Z_A-Z]+)\\/)}.flatten #get keys which are not replaced
-      # db_requests = []
-      # av_keys.each{|p|
-      #   db_requests = db_requests.present? ? tmp_db_requests.map{|i|
-      #     i.gsub(/,\{.*"\$(.*)#{p}(.*?)\}\},/, ',') #.gsub(/\,\s?\W?\"[a-z|A-Z|_]+\W?\"\:\s{\W?"\$eq\W?":(.*)?#{p}(.*?)\W}/, '')
-      #   } : builded_requests.map{|i|
-      #     i.gsub(/,\{.*"\$(.*)#{p}(.*?)\}\},/, ',') #.gsub(/\,\s?\W?\"[a-z|A-Z|_]+\W?\"\:\s{\W?"\$eq\W?":(.*)?#{p}(.*?)\W}/, '')
-      #   }
-      # } #TODO: this line will clean unfiled keys and mongo operator
-      # p 'db_requests', db_requests
       param.reject{|i|i.keys[0].match(/DATE/)}.each do |pm|
         request_key = pm.values[0]
         begin
-          p 'PM', pm
           rq = JSON.parse(tmp_db_requests.select{|i|i.keys[0] == request_key}.first[request_key])
-          p 'RQ', rq, request_key, pm
           result = rq.map{|r|eval(r)} #if eval("#{pm.keys[0].capitalize}").where("self_#{pm.keys[0].downcase}_id".to_sym => pm.values[0]).first
           pm[pm.keys[0].downcase] = pm.delete(pm.keys[0])
           out_data << pm.merge({result: result})
-          # p "PM", pm, 'OUT_DATA', out_data, 'db_requests', db_requests
         rescue StandardError => exception
           err_message = [exception.message, exception.backtrace].join("\n")
           p err_message
           out_data << { result: err_message }
         end
       end
-      p 'end', Time.now.to_i - startime
       return DataSerializer.new(out_data).to_json
     else
       return DataSerializer.new(eval(requests)).to_json

@@ -98,7 +98,7 @@ DEPENDENCIES
   sinatra-contrib
 
 RUBY VERSION
-   ruby 2.4.1p111
+   ruby 2.2.8p477
 
 BUNDLED WITH
    1.16.6

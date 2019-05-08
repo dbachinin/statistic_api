@@ -245,7 +245,7 @@ DynamicCollection.init_all
 #   end
 # end
 # Endpoints
-set :bind, '0.0.0.0'
+# set :bind, '0.0.0.0'
 get '/' do
   ""
 end
@@ -258,6 +258,7 @@ namespace '/api/v1' do
     Thread.new do
       timestamp = Time.now.to_i
       data = JSON.parse(params[:events])
+      p 'data', data
       # event = Event.create({timestamp: timestamp })
       event_models = data.keys.map{|k|{plural: k, singular: k.gsub(/\//,'__').camelize.singularize} }
       event_models.each do |model|
@@ -269,7 +270,7 @@ namespace '/api/v1' do
             item["self_#{model[:singular].underscore}_id"] = item.delete('id')
             item["self_#{model[:singular].underscore}_created_at"] = item.delete('created_at')
             item["self_#{model[:singular].underscore}_updated_at"] = item.delete('updated_at') }}
-            created = Event.where(name: model[:singular]).first&.created
+            created = Event.where(name: model[:singular]).first.try(:created)
             loaded = eval(model[:singular]) rescue false
             item_hash = {}
             data_model.flatten.each do |item|
@@ -379,8 +380,7 @@ namespace '/api/v2' do
     def filling_data
       req = []
       self.each{|b|
-        date = Time.parse(b[b.keys[0]]) && b[b.keys[0]].match(/^\d*-\d*-\d+/) rescue nil
-        val = date ? "Time.parse(\"#{b.values[0]}\")" : "\"#{b.values[0]}\""
+        val = "\"#{b.values[0]}\""
         req = req.any? ? req.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} : yield.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} 
       }
       req
@@ -408,7 +408,7 @@ namespace '/api/v2' do
         } 
       }
       builded_requests = builded_requests[keys_without_date.last].flatten
-
+p 'builded_requests', Time.now.to_i - startime
       if empty_params.any?
         empty_params.each do |key|
           clean_db_requests = clean_db_requests.any? ? clean_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/,\{.*"\$(.*)#{key}(.*?)\}\},/, ',').gsub(/\,\s?\W?\"[a-z|A-Z|_]+\W?\"\:\s{\W?"\$eq\W?":(.*)?#{key}(.*?)\W}/, '') } } : builded_requests.map{|r| { r.keys[0] => r.values[0].gsub(/,\{.*"\$(.*)#{key}(.*?)\}\},/, ',').gsub(/\,\s?\W?\"[a-z|A-Z|_]+\W?\"\:\s{\W?"\$eq\W?":(.*)?#{key}(.*?)\W}/, '') } }
@@ -416,12 +416,14 @@ namespace '/api/v2' do
       else
         clean_db_requests = builded_requests
       end
+      p 'clean_db_requests', Time.now.to_i - startime
       param.each do |pm|
         date = Time.parse(pm[pm.keys[0]]) && pm[pm.keys[0]].match(/^\d*-\d*-\d+/) rescue nil
         val = date ? "Time.parse('#{pm.values[0]}')" : "\"#{pm.values[0]}\""
         key = pm.keys[0]
         tmp_db_requests = tmp_db_requests.any? ? tmp_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val) } } : clean_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val)  } }
       end
+      p 'tmp_db_requests', Time.now.to_i - startime
       param.reject{|i|i.keys[0].match(/DATE/)}.each do |pm|
         request_key = pm.values[0]
         begin
@@ -435,6 +437,7 @@ namespace '/api/v2' do
           out_data << { result: err_message }
         end
       end
+      p 'end', Time.now.to_i - startime
       return DataSerializer.new(out_data).to_json
     else
       return DataSerializer.new(eval(requests)).to_json

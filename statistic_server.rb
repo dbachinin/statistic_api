@@ -375,13 +375,17 @@ namespace '/api/v2' do
     end
   end
   class Array
-    def filling_data
-      req = []
-      self.each{|b|
-        val = "\"#{b.values[0]}\""
-        req = req.any? ? req.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} : yield.map{|r|r.class.name == 'Hash' ? r.values[0].gsub(/\\#{b.keys[0]}\\/, val) : r.gsub(/\\#{b.keys[0]}\\/, val)} 
-      }
-      req
+    def filling_data(keys)
+      out = []
+      self.each do |i|
+        req = []
+        keys.each{|b|
+          val = i[b] ? "'#{i[b]}'" : "'null'"
+          req = req.any? ? req.map{|r|r.gsub(/\\\\#{b}\\\\/, val)} : [yield.gsub(/\\\\#{b}\\\\/, val)]
+        }
+        out << {i[keys[0]] => req.flatten.first}
+      end
+      out.flatten
     end
   end
 
@@ -390,22 +394,20 @@ namespace '/api/v2' do
     startime = Time.now.to_i
     requests = JSON.parse params[:req]
     param = JSON.parse params[:param]
+
+    # p 'param', param
+    # p 'requests', requests
+
     if param.try(:any?)
       out_data = []
       tmp_db_requests = []
       clean_db_requests = []
       keys =  param.map(&:keys).flatten.uniq
-      keys_without_date = keys.reverse.reject{|i|i.match(/DATE/)}
+      keys_without_date = keys.reject{|i|i.match(/DATE/)}
       keys_count = keys_without_date.count
       empty_params = JSON.parse(requests).map{|r|r.scan(/\\([A-Z|A-Z_A-Z]+)\\/)}.flatten - keys
       builded_requests = {}
-      keys_without_date.each_with_index{|v,i|
-        builded_requests[v] = []
-        param.select{|z|z[v]}.map(&:values).flatten.each{|r|
-          builded_requests[v] << { r => ([{ v => r }].filling_data{ i != 0 ? builded_requests[keys_without_date[i.more_on_one(keys_count)]].flatten : JSON.parse(requests) }).to_json }
-        } 
-      }
-      builded_requests = builded_requests[keys_without_date.last].flatten
+      builded_requests = param.filling_data(keys_without_date){requests}
 p 'builded_requests', Time.now.to_i - startime
       if empty_params.any?
         empty_params.each do |key|
@@ -421,7 +423,7 @@ p 'builded_requests', Time.now.to_i - startime
         key = pm.keys[0]
         tmp_db_requests = tmp_db_requests.any? ? tmp_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val) } } : clean_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val)  } }
       end
-      p 'tmp_db_requests', Time.now.to_i - startime, tmp_db_requests
+      p 'tmp_db_requests', Time.now.to_i - startime
       param.reject{|i|i.keys[0].match(/DATE/)}.each do |pm|
         request_key = pm.values[0]
         begin
@@ -435,6 +437,7 @@ p 'builded_requests', Time.now.to_i - startime
           out_data << { result: err_message }
         end
       end
+      p 'out_data', out_data
       p 'end', Time.now.to_i - startime
       return DataSerializer.new(out_data).to_json
     else

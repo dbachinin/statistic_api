@@ -258,9 +258,7 @@ namespace '/api/v1' do
     Thread.new do
       timestamp = Time.now.to_i
       data = JSON.parse(params[:events])
-      p 'data', data
-      # event = Event.create({timestamp: timestamp })
-      event_models = data.keys.map{|k|{plural: k, singular: k.gsub(/\//,'__').camelize.singularize} }
+      event_models = data.keys.reject{|i|i == 'nil_classes' }.map{|k|{plural: k, singular: k.gsub(/\//,'__').camelize.singularize} }
       event_models.each do |model|
         begin
           data_model = data[model[:plural]]
@@ -381,7 +379,7 @@ namespace '/api/v2' do
       req = []
       self.each{|b|
         val = "\"#{b.values[0]}\""
-        req = req.any? ? req.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} : yield.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} 
+        req = req.any? ? req.map{|r|r.gsub(/\\#{b.keys[0]}\\/, val)} : yield.map{|r|r.class.name == 'Hash' ? r.values[0].gsub(/\\#{b.keys[0]}\\/, val) : r.gsub(/\\#{b.keys[0]}\\/, val)} 
       }
       req
     end
@@ -423,7 +421,7 @@ p 'builded_requests', Time.now.to_i - startime
         key = pm.keys[0]
         tmp_db_requests = tmp_db_requests.any? ? tmp_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val) } } : clean_db_requests.map{|r| { r.keys[0] => r.values[0].gsub(/\\#{key}\\/, val)  } }
       end
-      p 'tmp_db_requests', Time.now.to_i - startime
+      p 'tmp_db_requests', Time.now.to_i - startime, tmp_db_requests
       param.reject{|i|i.keys[0].match(/DATE/)}.each do |pm|
         request_key = pm.values[0]
         begin

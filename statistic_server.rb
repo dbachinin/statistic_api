@@ -426,6 +426,7 @@ p 'builded_requests', Time.now.to_i - startime
       p 'tmp_db_requests', Time.now.to_i - startime
       param.reject{|i|i.keys[0].match(/DATE/)}.each do |pm|
         request_key = pm.values[0]
+        p request_key
         begin
           rq = JSON.parse(tmp_db_requests.select{|i|i.keys[0] == request_key}.first[request_key])
           result = rq.map{|r|eval(r)} #if eval("#{pm.keys[0].capitalize}").where("self_#{pm.keys[0].downcase}_id".to_sym => pm.values[0]).first

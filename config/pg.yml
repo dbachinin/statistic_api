@@ -1,0 +1,5 @@
+default:
+  database: hifc_statistic
+  username: postgres
+  password: Z@eb00
+  adapter: postgresql

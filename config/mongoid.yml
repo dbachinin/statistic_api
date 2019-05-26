@@ -1,6 +1,0 @@
-development:
-  clients:
-    default:
-      database: hifc_statistic_dev
-      hosts:
-        - localhost:27017

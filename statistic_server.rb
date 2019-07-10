@@ -9,6 +9,8 @@ Rack::Utils.key_space_limit = 262_144
 ActiveRecord::Base.connection.enable_query_cache!
 class CustomerStatus < ActiveRecord::Base
 end
+class Customer < ActiveRecord::Base
+end
 class HashSerializer
   def self.dump(hash)
     hash.to_json
@@ -71,9 +73,10 @@ namespace '/api/v2' do
 
   post '/get_data/' do
     startime = Time.now.to_i
-    requests = JSON.parse params[:req]
-    param = JSON.parse params[:param]
-    runcommand = JSON.parse params[:exec]
+#p JSON.parse(params[:req])
+    requests = JSON.parse(params[:req], :quirks_mode => true)
+    param = JSON.parse(params[:param], :quirks_mode => true)
+    runcommand = JSON.parse(params[:exec], :quirks_mode => true)
     multiple_params = {}
     param.each { |k| multiple_params[k.keys[0]] = multiple_params[k.keys[0]] ? multiple_params[k.keys[0]] << k.values[0] : [k.values[0]] }
     class Integer

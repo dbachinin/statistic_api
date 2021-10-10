@@ -1,5 +1,5 @@
 source :rubygems
-ruby "2.2.8"
+ruby "2.6.3"
 gem 'rake'
 gem "puma"
 gem "sinatra", require: 'sinatra/base'

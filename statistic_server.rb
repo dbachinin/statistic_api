@@ -3,6 +3,7 @@ require 'rubygems'
 require 'sinatra/activerecord'
 require './environments'
 require 'sinatra/namespace'
+set :database, {adapter: 'postgresql', database: 'hifc_statistic', username: 'postgres', password: 'Z@eb00'}
 
 Rack::Utils.key_space_limit = 262_144
 # module StatisticServer
@@ -65,15 +66,15 @@ namespace '/api/v2' do
     end
 
     def as_json(*)
-      data = []
-      @data.flatten.each { |i| i.delete('_id') if i['_id'] == 'null'; data << i }
-      data
+      @data.flatten.map do |i|
+        i.delete('_id') if i['_id'] == 'null'
+        i
+      end
     end
   end
 
   post '/get_data/' do
     startime = Time.now.to_i
-#p JSON.parse(params[:req])
     requests = JSON.parse(params[:req], :quirks_mode => true)
     param = JSON.parse(params[:param], :quirks_mode => true)
     runcommand = JSON.parse(params[:exec], :quirks_mode => true)
@@ -90,7 +91,7 @@ namespace '/api/v2' do
       def filling_data
         req = ''
         each  do |b|
-          val = b[1].class.name == 'Array' ? b[1].count > 1 ? b[1].to_s : b[1].first.to_s : b[1].class.name == 'Fixnum' ? b[1].to_s : b[1]
+          val = b[1].instance_of?(Array) ? b[1].count > 1 ? b[1].to_s : b[1].first.to_s : b[1].class.name == 'Fixnum' ? b[1].to_s : b[1]
           req = !req.empty? ? req.gsub(/\\\\#{b[0]}\\\\/, val) : yield.gsub(/\\\\#{b[0]}\\\\/, val)
         end
         req.gsub(/,\s+\)/, ')').gsub(/,\s+\w+\:\s\)/, ')')
@@ -101,10 +102,10 @@ namespace '/api/v2' do
     end
 
     if param.try(:any?)
-      builded_runcommand = {}
       builded_runcommand = multiple_params.filling_data { runcommand }
       bo = BuildObject.new
       bo.instance_eval(requests)
+      p '#####################'*20, eval("bo.#{builded_runcommand}").to_json, requests
       return eval("bo.#{builded_runcommand}").to_json
     else
       return DataSerializer.new(eval(requests)).to_json

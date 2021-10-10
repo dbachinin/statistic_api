@@ -105,7 +105,6 @@ namespace '/api/v2' do
       builded_runcommand = multiple_params.filling_data { runcommand }
       bo = BuildObject.new
       bo.instance_eval(requests)
-      p '#####################'*20, eval("bo.#{builded_runcommand}").to_json, requests
       return eval("bo.#{builded_runcommand}").to_json
     else
       return DataSerializer.new(eval(requests)).to_json

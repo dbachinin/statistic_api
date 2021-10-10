@@ -3,3 +3,5 @@ default:
   username: postgres
   password: Z@eb00
   adapter: postgresql
+  host: postgres-container
+  port: 5433
